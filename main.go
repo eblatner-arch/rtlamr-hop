@@ -1,5 +1,7 @@
 // RTLAMR - An rtl-sdr receiver for smart meters operating in the 900MHz ISM band.
 // Copyright (C) 2015 Douglas Hall
+// RTLAMR - An rtl-sdr receiver for smart meters operating in the 900MHz ISM band.
+// Copyright (C) 2015 Douglas Hall
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published
@@ -91,7 +93,7 @@ func (rcvr *Receiver) NewReceiver(ctx context.Context) {
 	rcvr.d.Allocate()
 
 	// Connect to rtl_tcp server.
-		if err := rcvr.Connect(nil); err != nil {
+	if err := rcvr.Connect(); err != nil {
 		rcvr.canc(fmt.Errorf("rcvr.Connect: %w", err))
 		return
 	}
