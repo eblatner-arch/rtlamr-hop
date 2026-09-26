@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,6 +46,10 @@ import (
 )
 
 var rcvr Receiver
+
+// --- added for frequency hopping ---
+var hopFreqs = flag.String("hopfreqs", "", "comma-separated list of frequencies in Hz to hop between, e.g. 912600000,916000000,919000000")
+var hopInterval = flag.Duration("hopinterval", 30*time.Second, "dwell time per frequency when hopping")
 
 type Receiver struct {
 	rtltcp.SDR
@@ -132,8 +137,59 @@ func (rcvr *Receiver) Close() {
 	rcvr.SDR.Close()
 }
 
+// --- added for frequency hopping ---
+func parseHopFreqs(s string) []uint32 {
+	var freqs []uint32
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		f, err := strconv.ParseUint(part, 10, 32)
+		if err != nil {
+			slog.Error("invalid hop frequency", "value", part, "error", err)
+			continue
+		}
+		freqs = append(freqs, uint32(f))
+	}
+	return freqs
+}
+
+// --- added for frequency hopping ---
+func (rcvr *Receiver) HopLoop(freqs []uint32) {
+	defer rcvr.wg.Done()
+
+	if len(freqs) == 0 {
+		return
+	}
+
+	ticker := time.NewTicker(*hopInterval)
+	defer ticker.Stop()
+
+	idx := 0
+	for {
+		select {
+		case <-rcvr.ctx.Done():
+			return
+		case <-ticker.C:
+			idx = (idx + 1) % len(freqs)
+			rcvr.SetCenterFreq(freqs[idx])
+			slog.Info("hopped frequency", "freq", freqs[idx])
+		}
+	}
+}
+
 func (rcvr *Receiver) Run() {
 	rcvr.wg.Add(3)
+
+	// --- added for frequency hopping ---
+	if *hopFreqs != "" {
+		freqs := parseHopFreqs(*hopFreqs)
+		if len(freqs) > 0 {
+			rcvr.wg.Add(1)
+			go rcvr.HopLoop(freqs)
+		}
+	}
 
 	sampleBuf := &bytes.Buffer{}
 
